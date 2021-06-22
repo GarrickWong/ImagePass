@@ -1,0 +1,6 @@
+{"manifest_version": 2,
+  "name": "ImagePass",
+  "version": "0.1",
+  "description": "Image-based password extension",
+  "browser_action": {"default_popup": "popup.html"}
+}
