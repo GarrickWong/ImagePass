@@ -311,7 +311,7 @@ function enterPassword() {
     if (mode=="create") {
 	     if (inputPassword == password) {
 
-		div0.innerHTML = "Yay! You correctly entered your password!";
+		div0.innerHTML = "Correct! New text password is: " + inputPassword;
 
 
 	}
