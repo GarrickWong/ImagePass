@@ -1,8 +1,7 @@
 //==============================================================================================================
 //GLOBAL VARIABLES
 //==============================================================================================================
-
-var numSet = new Array();
+var url;
 
 var password = "";
 var temp;
@@ -17,15 +16,12 @@ var c, nx, ny, dx, dy/*, picmaxx, picmaxy*/;
 var picx;
 var picy;
 
-var az = "1!2@3#4$5%6^7&8*9?AaBbCcDdEeFfGgHhIiJjKkLlMmNnOoPpQqRrSsTtUuVvWwXxYy";
-
+var az = "1a2b3c4d5e6f7g8h9ijklmnopqrstuvwxy";
+var za = "A!B@C#D$E%F^G&H*I?JKLMNOPQRSTUVWXY";
 
 var paper;
-var imageDir = ".."
 
 var picfile;
-var picname;
-var filename;
 
 var filePos;
 var tileFiles;
@@ -61,14 +57,22 @@ var mode;
 var div0;
 var div1;
 
+var xhttp;
+
 function genPassword() {
+  url = '';
+  picfile = '';
+  chrome.tabs.query({active: true, currentWindow: true}, tabs => {
+    url = tabs[0].url;
+  });
+  returnMain();
   mode = "create";
   showp = true;
   passwordSetCount = 0;
   password = "";
   passwordSet = new Array();
   while (passwordSetCount < numClicks) {
-    temp = [getRandom(0,9),getRandom(0,7)];
+    temp = [getRandom(0,7),getRandom(0,5)];
     for (var i = 0; i < passwordSetCount; i++) {
       if(passwordSet[i] == temp) {
         temp = null;
@@ -77,17 +81,15 @@ function genPassword() {
     }
     if(temp != null) {
       passwordSet[passwordSetCount] = temp;
-      numSet[passwordSetCount] = [getRandom(0,67 - passwordSet[passwordSetCount][0]), getRandom(0,67 - passwordSet[passwordSetCount][1])]
       passwordSetCount ++;
     }
   }
   passwordSet.sort();
-  for (var i = 0; i < passwordSetCount; i++)   password += az.substr(passwordSet[i][0]+numSet[i][0],1) + az.substr(passwordSet[i][1]+numSet[i][1],1);
+  for (var i = 0; i < passwordSetCount; i++)   password += az.substr(passwordSet[i][0],1) + za.substr(passwordSet[i][1],1);
   if (tileset != null)   tileset = paper.clear();
   if (tileset2 != null)   tileset2 = paper.clear();
   if (tileset3 != null)   tileset3 = paper.clear();
   createCanvas();
-  updateCanvas();
   button0 = document.createElement("button");
   button0.innerHTML += "Hide Password";
   button1 = document.createElement("button");
@@ -102,16 +104,26 @@ function genPassword() {
 }
 
 function releasePassword() {
-  mode = "enter";
-  showp = false;
-  createCanvas();
-  button1 = document.createElement("button");
-  button1.innerHTML += "Go Back";
-  div0 = document.getElementById("button_div");
-  div0.appendChild(button1);
-  div0.style.display = "initial";
-  document.getElementById("main").style.display = "none";
-  button1.setAttribute("onclick","returnMain()");
+  chrome.tabs.query({active: true, currentWindow: true}, tabs => {
+    url = tabs[0].url;
+  });
+  setTimeout(function() {picfile = '';
+    returnMain();
+    mode = "enter";
+    showp = false;
+    button1 = document.createElement("button");
+    button1.innerHTML += "Go Back";
+    div0 = document.getElementById("button_div");
+    div0.appendChild(button1);
+    document.getElementById("main").style.display = "none";
+    button1.setAttribute("onclick","returnMain()");
+    div0.style.display = "initial";
+    if (tileset != null)   tileset = paper.clear();
+    if (tileset2 != null)   tileset2 = paper.clear();
+    if (tileset3 != null)   tileset3 = paper.clear();
+    createCanvas();
+  }, 250);
+
 }
 
 function hidePassword() {
@@ -129,103 +141,117 @@ function showPassword() {
 }
 
 function getRandom(min, max) {
-    var randomNum = Math.random() * (max-min);
-    return(Math.round(randomNum) + min);
+  var randomNum = Math.random() * (max-min);
+  return(Math.round(randomNum) + min);
 }
 
 function doClick(coords) {
-    this.ij = coords;
-    var current = this;
-    this.invoke = function () {
+  this.ij = coords;
+  var current = this;
+  this.invoke = function () {
 
-	if (choosingPic) return;
-	if (inputPasswordSetCount >= numClicks) return;
+    if (choosingPic) return;
+    if (inputPasswordSetCount >= numClicks) return;
 
-	i = current.ij[0];
-	j = current.ij[1];
+    i = current.ij[0];
+    j = current.ij[1];
 
 
-	inputPasswordSet[inputPasswordSetCount] = [i,j];
-	inputPasswordSetCount ++;
+    inputPasswordSet[inputPasswordSetCount] = [i,j];
+    inputPasswordSetCount ++;
 
-	updateCanvas();
-	updateCanvas2();
-    }
-
+    updateCanvas();
+    updateCanvas2();
   }
 
-  function inInputPassword(coords) {
-      for (var k=0; k<inputPasswordSetCount; k++) {
-  	if (inputPasswordSet[k][0]==coords[0] && inputPasswordSet[k][1]==coords[1]) return true;
-      }
-      return false;
-  }
+}
 
-function createCanvas() {
+function inInputPassword(coords) {
+  for (var k=0; k<inputPasswordSetCount; k++) {
+      if (inputPasswordSet[k][0]==coords[0] && inputPasswordSet[k][1]==coords[1]) return true;
+  }
+  return false;
+}
+
+async function createCanvas() {
+
   div1 = document.getElementById("canvas_container");
   div1.style.display = "initial";
-  //creates canvas to draw on
-  paper = Raphael(div1, 2000, 2000);
-  nx = 10
-  ny = 8
-  dx = 1152/nx;
-  dy = 648/ny;
-  //gets path for image
-  picfile = imageDir + "/blankPic.jpg";
-  picname = "blankPic.jpg";
-
+  let img;
+  let imageLoadPromise = new Promise(resolve => {
+    if (mode == "create") {
+      //Creates HttpRequest to get new random image
+      getPicture(function() {
+        picfile = this.responseText;
+        let xhr = new XMLHttpRequest();
+        xhr.onreadystatechange = function() {
+          if (this.readyState == 4 && this.status == 200) {
+              div0 = document.getElementById("password");
+              div0.style.display = "initial";
+              div0.innerHTML = "Password Saved!"
+          }
+          else {
+            div0 = document.getElementById("password");
+            div0.style.display = "initial";
+            div0.innerHTML = "Failed to save password.";
+          }
+        }
+        let data = {};
+        data.url = url;
+        data.image = picfile;
+        data.password = password;
+        xhr.open("POST", "http://localhost:3000/addPassword",true);
+        xhr.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
+        xhr.send(JSON.stringify(data));
+        img = new Image();
+        img.onload = resolve;
+        img.src = picfile;
+      });
+    } else { //mode is enter
+      // Creates HttpRequest to get password url
+      let xhr = new XMLHttpRequest();
+      xhr.onreadystatechange = function() {
+        if (this.status == 404) {
+          div0 = document.getElementById("password");
+          div0.style.display = "initial";
+          div0.innerHTML = "Password not found.";
+        }
+        else {
+          setTimeout(function() {
+            let info = JSON.parse(xhr.responseText);
+              picfile = info.image;
+              div0 = document.getElementById("password");
+              div0.style.display = "initial";
+              password = info.password;
+              div0.innerHTML = "Password loaded.";
+              img = new Image();
+              img.onload = resolve;
+              img.src = picfile;
+            }, 250)
+        }
+      }
+        let data = {};
+        data.url = url;
+        xhr.open("POST", "http://localhost:3000/password",true);
+        xhr.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
+        xhr.send(JSON.stringify(data));
+      }
+});
+  await imageLoadPromise;
+  picx = img.width;
+  picy = img.height;
+  nx = 8
+  ny = 6
+  dx = picx/nx;
+  dy = picy/ny;
+  paper = Raphael(div1, picx+10, picy+10);
   filePos = Array();
   tilePos =  Array();
   tileImages = Array();
   tileImageSet = paper.set();
   passwordFileNames = Array();
 
-  //This draws the image on the canvas
-  picture = paper.image(picfile, 1, 1, 1152, 648 );
-  //This draws the text click-counter
-  clickCounter = paper.text(1, 1+10, "Remaining Clicks: "+numClicks);
-  clickCounter.attr({'text-anchor': "start",'font-size': 14});
-
-  //This draws the clear button
-  button = paper.rect(1+300, 1+5, 100, 20, 10);
-  button.attr({fill: "lightgrey"});
-
-  clear = paper.text(1+350, 1+15, "Clear");
-  clear.attr({'font-size': 14});
-  //	clear.toFront();
-  clear.node.style.cursor = "default";
-
-
-  button.node.onclick = function() {
-//		traceit("are we here?");
-    clearPassword();
-    updateCanvas();
-  }
-
-  clear.node.onclick = button.node.onclick;
-
-
-  //This draws the line connecting the circles in the visual click-counter
-  var line = paper.path("M7 430L117 430");
-  line.hide();
-  //	line.toBack();
-
-  //This draws the circles in the visual click-counter
-  circles = Array();
-
-  for (var i=0; i<numClicks; i++) {
-    circles[i] = paper.circle(1+25*i+2,1+30,10);
-    circles[i].attr({fill: "orange"});
-  }
-
-  clickCounter.hide();
-  button.hide();
-  clear.hide();
-  for (var i=0; i<numClicks; i++) {
-    circles[i].hide();
-  }
-  line.hide();
-
+  picture = paper.image(picfile, 1, 1, picx, picy);
 
   //This draws the grid over the password image and ties it to the clicks
 
@@ -237,200 +263,172 @@ function createCanvas() {
   tilesquares2 = Array();
   tilesquares3 = Array();
 
-  numberSet = paper.set();
-  tileNumbers = Array();
-  tileNumbers2 = Array();
-  tileDigits = Array();
-
-
   for (var i = 0; i < nx; i++) {
     for (var j = 0; j < ny; j++) {
       tilesquares[[i,j]] = paper.rect(i*dx+3,j*dy+3,dx-6,dy-6);
       tilesquares2[[i,j]] = paper.rect(i*dx+3,j*dy+3,dx-6,dy-6);
       tilesquares3[[i,j]] = paper.rect(i*dx,j*dy,dx,dy);
-      if (mode=="create") {
-        tileDigits[[i,j]] = "";
-        tileNumbers[[i,j]] = paper.text(i*dx+0.5*dx, j*dx+0.5*dx, "");
-        tileNumbers[[i,j]].attr({'font-size': 32, fill: 'yellow'});
-        tileNumbers2[[i,j]] = paper.text(i*dx+0.5*dx, j*dx+0.5*dx, "");
-        tileNumbers2[[i,j]].attr({'font-size': 28, fill: 'black'});
-      }
-
-      else {
-        r = getRandom(0,9);
-        tileDigits[[i,j]] = r+"";
-        tileNumbers[[i,j]] = paper.text(i*dx+0.5*dx, j*dx+0.5*dx, r);
-        tileNumbers[[i,j]].attr({'font-size': 32, fill: 'yellow'});
-        tileNumbers2[[i,j]] = paper.text(i*dx+0.5*dx, j*dx+0.5*dx, r);
-        tileNumbers2[[i,j]].attr({'font-size': 28, fill: 'black'});
-      }
 
       tilesquares2[[i,j]].node.onclick = new doClick([i,j]).invoke;
       tilesquares3[[i,j]].node.onclick = new doClick([i,j]).invoke;
       tileset.push(tilesquares[[i,j]]);
       tileset2.push(tilesquares2[[i,j]]);
       tileset3.push(tilesquares3[[i,j]]);
-      numberSet.push(tileNumbers[[i,j]]);
-      numberSet.push(tileNumbers2[[i,j]]);
-    }
+}
   }
 
-    tileset.show();
-    tileset2.show();
-    tileset3.show();
+  tileset.show();
+  tileset2.show();
+  tileset3.show();
 
-    tileset.attr({fill: allsq, stroke: allb1, 'fill-opacity': allopacity, 'stroke-opacity': 1.0, 'stroke-width': 1});
-    tileset2.attr({fill: allsq, stroke: allb2, 'fill-opacity': allopacity, 'stroke-opacity': 1.0, 'stroke-width': .5});
-    tileset3.attr({fill: allsq, stroke: allb1, 'fill-opacity': 0.0, 'stroke-opacity': 1.0, 'stroke-width': 0.0001});
+  tileset.attr({fill: allsq, stroke: allb1, 'fill-opacity': allopacity, 'stroke-opacity': 1.0, 'stroke-width': 1});
+  tileset2.attr({fill: allsq, stroke: allb2, 'fill-opacity': allopacity, 'stroke-opacity': 1.0, 'stroke-width': .5});
+  tileset3.attr({fill: allsq, stroke: allb1, 'fill-opacity': 0.0, 'stroke-opacity': 1.0, 'stroke-width': 0.0001});
 
-    tileset.toFront();
-    tileset2.toFront();
-    tileset3.toFront();
+  tileset.toFront();
+  tileset2.toFront();
+  tileset3.toFront();
 
+  tileset3.attr({fill: allsq, stroke: allb1, 'fill-opacity': 0.0, 'stroke-opacity': 1.0, 'stroke-width': 0.0001});
 
-    tileset3.attr({fill: allsq, stroke: allb1, 'fill-opacity': 0.0, 'stroke-opacity': 1.0, 'stroke-width': 0.0001});
-
-    numberSet.hide();
-    updateCanvas();
+  updateCanvas();
 }
 
 function enterPassword() {
   div0 = document.createElement("div");
   div1 = document.getElementById("password");
   inputPassword = "";
-  for (var i = 0; i < inputPasswordSetCount; i++)   inputPassword += az.substr(inputPasswordSet[i][0]+numSet[i][0],1) + az.substr(inputPasswordSet[i][1]+numSet[i][1],1);
-
+  for (var i = 0; i < inputPasswordSetCount; i++)   inputPassword += az.substr(inputPasswordSet[i][0],1) + za.substr(inputPasswordSet[i][1],1);
 
     inputPassword = "";
-
     inputPasswordSet.sort();
 
-
-	for (var i = 0; i < inputPasswordSetCount; i++)   inputPassword += az.substr(inputPasswordSet[i][0]+numSet[i][0],1) + az.substr(inputPasswordSet[i][1]+numSet[i][1],1);
-
+  for (var i = 0; i < inputPasswordSetCount; i++)   inputPassword += az.substr(inputPasswordSet[i][0],1) + za.substr(inputPasswordSet[i][1],1);
     if (mode=="create") {
-	     if (inputPassword == password) {
+      if (inputPassword == password) {
+        div0.innerHTML = "Correct! New text password is: " + inputPassword;
+      }
+      else { // inputPassword != password
+        div0.innerHTML = "Incorrect, please try again. ";
 
-		div0.innerHTML = "Correct! New text password is: " + inputPassword;
+      }
 
-
-	}
-	else { // inputPassword != password
-	    div0.innerHTML = "Oops, try again! ";
-
-		}
-
-  while(div1.childNodes.length != 0) {
-    div1.removeChild(div1.lastChild);
-  }
-  div1.style.display = "initial";
-  div1.appendChild(div0);
-	inputPasswordSet = Array();
-	inputPasswordSetCount = 0;
-	updateCanvas();
+      while(div1.childNodes.length != 0) {
+        div1.removeChild(div1.lastChild);
+      }
+      div1.style.display = "initial";
+      div1.appendChild(div0);
+      inputPasswordSet = Array();
+      inputPasswordSetCount = 0;
+      updateCanvas();
 
     }
 
     else { //mode is enter
-	if (inputPassword == password) {
-   div0.innerHTML = inputPassword;
-   while(div1.childNodes.length != 0) {
-     div1.removeChild(div1.lastChild);
-   }
-   div1.style.display = "initial";
-   div1.appendChild(div0);
-
-  }
-	else {
-     div0.innerHTML = "Password is incorrect";
+    if (inputPassword == password) {
+     div0.innerHTML = inputPassword;
      while(div1.childNodes.length != 0) {
        div1.removeChild(div1.lastChild);
      }
      div1.style.display = "initial";
      div1.appendChild(div0);
 
-  }
-
     }
+    else {
+       div0.innerHTML = "Password is incorrect";
+       while(div1.childNodes.length != 0) {
+         div1.removeChild(div1.lastChild);
+       }
+       div1.style.display = "initial";
+       div1.appendChild(div0);
+    }
+    inputPasswordSet = Array();
+    inputPasswordSetCount = 0;
+    updateCanvas();
+  }
 }
 
 
 function updateCanvas2() {
 
-    if (inputPasswordSetCount==numClicks) {
-	if (mode=="create" && choosingPwd) {
-	    $.prompt("Click 'Accept Password' to choose this password, or 'Clear' to select another. ");
+  if (inputPasswordSetCount==numClicks) {
+     enterPassword();
 
-	}
-	else enterPassword();
-
-    }
-
-    updateCanvas();
+  }
+  updateCanvas();
 }
 
 function updateCanvas() {
 
+  console.log(picfile);
+  picture = paper.image(picfile, 1, 1, picx, picy);
 
-    if (mode=="create") {
-
-
-    console.log(picfile);
-    picture = paper.image(picfile, 1, 1, picx, picy);
-
-    if (showp) allopacity = 0.1;
-    else allopacity = 0.0;
+  if (showp) allopacity = 0.1;
+  else allopacity = 0.0;
 
 
-    if (choosingPic) {
-	    tileset.hide();
-    	tileset2.hide();
-      tileset3.hide();
+  if (choosingPic) {
+    tileset.hide();
+    tileset2.hide();
+    tileset3.hide();
 
+  }
+  else {
+   tileset.show();
+   tileset2.show();
+   tileset3.show();
+  }
+
+  tileset.attr({fill: allsq, stroke: allb1, 'fill-opacity': allopacity, 'stroke-opacity': 1.0, 'stroke-width': 1});
+  tileset2.attr({fill: allsq, stroke: allb2, 'fill-opacity': allopacity, 'stroke-opacity': 1.0, 'stroke-width': .5});
+  tileset.toFront();
+
+  tileset2.toFront();
+  tileset3.toFront();
+  //numberSet.toFront();
+
+
+  if (showp) {
+
+    //numberSet.attr({text:""});
+
+    for (var i=0; i<passwordSetCount; i++) {
+        tilesquares[passwordSet[i]].attr({fill: pwdsq, stroke: pwdb1, 'fill-opacity': 0.0, 'stroke-opacity': 1.0, 'stroke-width': 7});
+        tilesquares2[passwordSet[i]].attr({fill: pwdsq, stroke: pwdb2, 'fill-opacity': 0.0, 'stroke-opacity': 1.0, 'stroke-width': 3});
+      /*  tileNumbers[passwordSet[i]].attr({text: i+1})
+        tileNumbers2[passwordSet[i]].attr({text: i+1})*/
+        tilesquares[passwordSet[i]].toFront();;
+        tilesquares2[passwordSet[i]].toFront();
+      /*  tileNumbers[passwordSet[i]].toFront();
+        tileNumbers2[passwordSet[i]].toFront();*/
+        tilesquares3[passwordSet[i]].toFront();
     }
-    else {
-	   tileset.show();
-	   tileset2.show();
-	   tileset3.show();
-    }
 
-    tileset.attr({fill: allsq, stroke: allb1, 'fill-opacity': allopacity, 'stroke-opacity': 1.0, 'stroke-width': 1});
-    tileset2.attr({fill: allsq, stroke: allb2, 'fill-opacity': allopacity, 'stroke-opacity': 1.0, 'stroke-width': .5});
-    tileset.toFront();
-
-    tileset2.toFront();
-    tileset3.toFront();
-    numberSet.toFront();
-
-
-    if (showp) {
-
-	numberSet.attr({text:""});
-
-	for (var i=0; i<passwordSetCount; i++) {
-	    tilesquares[passwordSet[i]].attr({fill: pwdsq, stroke: pwdb1, 'fill-opacity': 0.0, 'stroke-opacity': 1.0, 'stroke-width': 7});
-	    tilesquares2[passwordSet[i]].attr({fill: pwdsq, stroke: pwdb2, 'fill-opacity': 0.0, 'stroke-opacity': 1.0, 'stroke-width': 3});
-	    tileNumbers[passwordSet[i]].attr({text: i+1})
-	    tileNumbers2[passwordSet[i]].attr({text: i+1})
-	    tilesquares[passwordSet[i]].toFront();;
-	    tilesquares2[passwordSet[i]].toFront();
-	    tileNumbers[passwordSet[i]].toFront();
-	    tileNumbers2[passwordSet[i]].toFront();
-	    tilesquares3[passwordSet[i]].toFront();
-	}
-
-	  }
+  }
   for (var i=0; i<inputPasswordSetCount; i++) {
-	    tilesquares[inputPasswordSet[i]].attr({fill: pwdsq, stroke: "blue", 'fill-opacity': 0.0, 'stroke-opacity': 1.0, 'stroke-width': 7});
-	    tilesquares2[inputPasswordSet[i]].attr({fill: pwdsq, stroke: "limegreen", 'fill-opacity': 0.0, 'stroke-opacity': 1.0, 'stroke-width': 3});
+      tilesquares[inputPasswordSet[i]].attr({fill: pwdsq, stroke: "blue", 'fill-opacity': 0.0, 'stroke-opacity': 1.0, 'stroke-width': 7});
+      tilesquares2[inputPasswordSet[i]].attr({fill: pwdsq, stroke: "limegreen", 'fill-opacity': 0.0, 'stroke-opacity': 1.0, 'stroke-width': 3});
 
-	    tilesquares[inputPasswordSet[i]].toFront();
-	    tilesquares2[inputPasswordSet[i]].toFront();
-	    tileNumbers[inputPasswordSet[i]].toFront();
-	    tileNumbers2[inputPasswordSet[i]].toFront();
-	    tilesquares3[inputPasswordSet[i]].toFront();
-	}
+      tilesquares[inputPasswordSet[i]].toFront();
+      tilesquares2[inputPasswordSet[i]].toFront();
+  /*    tileNumbers[inputPasswordSet[i]].toFront();
+      tileNumbers2[inputPasswordSet[i]].toFront();*/
+      tilesquares3[inputPasswordSet[i]].toFront();
+  }
 
+}
+
+function getPicture(callback) {
+  xhttp = new XMLHttpRequest();
+    xhttp.onreadystatechange = function() {
+      if (this.readyState == 4 && this.status == 200) {
+        if(typeof callback === "function") {
+          callback.apply(xhttp);
+        }
+      }
+    }
+    xhttp.open("GET", "http://localhost:3000/picture",true);
+    xhttp.send();
 }
 
 
