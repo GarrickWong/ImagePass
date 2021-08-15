@@ -4,11 +4,13 @@
 var url;
 
 var password = "";
+var encrypted = "";
 var temp;
 var passwordSet = new Array();
 var passwordSetCount = 0;
 
 var inputPassword = "";
+var inputEncrypted = "";
 var inputPasswordSet = new Array();
 var inputPasswordSetCount = 0;
 
@@ -59,7 +61,7 @@ var div1;
 
 var xhttp;
 
-function genPassword() {
+async function genPassword() {
   url = '';
   picfile = '';
   chrome.tabs.query({active: true, currentWindow: true}, tabs => {
@@ -86,6 +88,10 @@ function genPassword() {
   }
   passwordSet.sort();
   for (var i = 0; i < passwordSetCount; i++)   password += az.substr(passwordSet[i][0],1) + za.substr(passwordSet[i][1],1);
+  var encoded = new TextEncoder().encode(password);
+  var hashBuffer = await window.crypto.subtle.digest('SHA-256', encoded);
+  var hashArray = Array.from(new Uint8Array(hashBuffer));
+  encrypted = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
   if (tileset != null)   tileset = paper.clear();
   if (tileset2 != null)   tileset2 = paper.clear();
   if (tileset3 != null)   tileset3 = paper.clear();
@@ -188,7 +194,7 @@ async function createCanvas() {
           if (this.readyState == 4 && this.status == 200) {
               div0 = document.getElementById("password");
               div0.style.display = "initial";
-              div0.innerHTML = "Password Saved!"
+              div0.innerHTML = "Password Saved! Text password is" + password + " " + encrypted;
           }
           else {
             div0 = document.getElementById("password");
@@ -199,7 +205,7 @@ async function createCanvas() {
         let data = {};
         data.url = url;
         data.image = picfile;
-        data.password = password;
+        data.password = encrypted;
         xhr.open("POST", "http://localhost:3000/addPassword",true);
         xhr.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
         xhr.send(JSON.stringify(data));
@@ -222,7 +228,7 @@ async function createCanvas() {
               picfile = info.image;
               div0 = document.getElementById("password");
               div0.style.display = "initial";
-              password = info.password;
+              encrypted = info.password;
               div0.innerHTML = "Password loaded.";
               img = new Image();
               img.onload = resolve;
@@ -294,14 +300,11 @@ async function createCanvas() {
   updateCanvas();
 }
 
-function enterPassword() {
+async function enterPassword() {
   div0 = document.createElement("div");
   div1 = document.getElementById("password");
   inputPassword = "";
-  for (var i = 0; i < inputPasswordSetCount; i++)   inputPassword += az.substr(inputPasswordSet[i][0],1) + za.substr(inputPasswordSet[i][1],1);
-
-    inputPassword = "";
-    inputPasswordSet.sort();
+  inputPasswordSet.sort();
 
   for (var i = 0; i < inputPasswordSetCount; i++)   inputPassword += az.substr(inputPasswordSet[i][0],1) + za.substr(inputPasswordSet[i][1],1);
     if (mode=="create") {
@@ -325,26 +328,29 @@ function enterPassword() {
     }
 
     else { //mode is enter
-    if (inputPassword == password) {
-     div0.innerHTML = inputPassword;
-     while(div1.childNodes.length != 0) {
-       div1.removeChild(div1.lastChild);
-     }
-     div1.style.display = "initial";
-     div1.appendChild(div0);
-
-    }
-    else {
-       div0.innerHTML = "Password is incorrect";
-       while(div1.childNodes.length != 0) {
-         div1.removeChild(div1.lastChild);
-       }
-       div1.style.display = "initial";
-       div1.appendChild(div0);
-    }
-    inputPasswordSet = Array();
-    inputPasswordSetCount = 0;
-    updateCanvas();
+      var encoded = new TextEncoder().encode(inputPassword);
+      var hashBuffer = await window.crypto.subtle.digest('SHA-256', encoded);
+      var hashArray = Array.from(new Uint8Array(hashBuffer));
+      inputEncrypted = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+      if (inputEncrypted == encrypted) {
+        div0.innerHTML = "Correct, password is: " + inputPassword;
+        while(div1.childNodes.length != 0) {
+          div1.removeChild(div1.lastChild);
+        }
+        div1.style.display = "initial";
+        div1.appendChild(div0);
+      }
+      else {
+        div0.innerHTML = "Password is incorrect";
+        while(div1.childNodes.length != 0) {
+          div1.removeChild(div1.lastChild);
+        }
+        div1.style.display = "initial";
+        div1.appendChild(div0);
+      }
+      inputPasswordSet = Array();
+      inputPasswordSetCount = 0;
+      updateCanvas();
   }
 }
 
@@ -433,6 +439,8 @@ function getPicture(callback) {
 
 
 function returnMain() {
+  inputPasswordSet = Array();
+  inputPasswordSetCount = 0;
   div0 = document.getElementById("button_div");
   div1 = document.getElementById("canvas_container");
   div2 = document.getElementById("password");
